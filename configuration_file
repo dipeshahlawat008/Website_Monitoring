@@ -1,0 +1,78 @@
+**Website Monitoring using AWS Lambda & Aurora**
+
+Step 1: Setup Aurora Database
+
+Login to AWS Console → Navigate to RDS → Click Create database.
+
+Choose Amazon Aurora (MySQL/PostgreSQL compatible) and select Serverless v2 for auto-scaling.
+
+Set database credentials (Username & Password) and configure VPC security groups for Lambda access.
+
+Create a table to store monitoring logs:
+
+CREATE TABLE website_status (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    url VARCHAR(255),
+    status_code INT,
+    response_time FLOAT,
+    checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+Step 2: Create AWS Lambda Function
+
+Navigate to AWS Lambda → Click Create function → Choose Author from scratch.
+
+Select Python 3.x runtime, set execution role with RDS access permissions.
+
+Install dependencies locally and package them:
+
+pip install pymysql -t .
+zip -r lambda_function.zip .
+
+Upload lambda_function.zip to AWS Lambda and add the following code:
+
+import pymysql
+import requests
+import os
+
+DB_HOST = os.getenv("DB_HOST")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASS")
+DB_NAME = os.getenv("DB_NAME")
+URL_TO_MONITOR = "https://example.com"
+
+def lambda_handler(event, context):
+    conn = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASS, database=DB_NAME)
+    cursor = conn.cursor()
+    try:
+        response = requests.get(URL_TO_MONITOR, timeout=5)
+        status_code = response.status_code
+        response_time = response.elapsed.total_seconds()
+    except Exception as e:
+        status_code = 0
+        response_time = None
+
+    cursor.execute("INSERT INTO website_status (url, status_code, response_time) VALUES (%s, %s, %s)",
+                   (URL_TO_MONITOR, status_code, response_time))
+    conn.commit()
+    conn.close()
+
+Step 3: Configure AWS Services
+
+Environment Variables: Add DB_HOST, DB_USER, DB_PASS, DB_NAME in Lambda settings.
+
+CloudWatch Monitoring: Go to CloudWatch → Create an alarm to trigger alerts based on website status.
+
+SNS for Notifications: Setup an SNS topic → Subscribe email/SMS → Link CloudWatch alarm to SNS.
+
+Schedule Lambda Execution: Use EventBridge (CloudWatch Events) to trigger Lambda every 5 minutes.
+
+Step 4: Testing & Optimization
+
+Test Lambda Function: Manually invoke Lambda from AWS Console.
+
+Check Logs: Go to CloudWatch Logs to verify execution details.
+
+Optimize Performance: Enable VPC endpoints, optimize database queries, and minimize cold starts.
+
+Tools Used: AWS Lambda, Amazon Aurora (RDS), CloudWatch, SNS, EventBridge, API Gateway, Python (Boto3, Requests, PyMySQL).
